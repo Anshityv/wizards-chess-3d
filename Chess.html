@@ -1,0 +1,956 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Wizard's Chess 3D — Minimalist Gothic M3</title>
+  <!-- Google Fonts & Material Symbols -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet" />
+  <!-- Three.js, OrbitControls, and Chess.js -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
+  <style>
+    :root {
+      --m3-surface: rgba(18, 18, 22, 0.72);
+      --m3-border: rgba(255, 255, 255, 0.12);
+      --m3-primary: #d0bcff;
+      --m3-on-primary: #381e72;
+      --m3-emerald: #4ade80;
+      --m3-crimson: #f87171;
+      --m3-gold: #d4af37;
+      --m3-text: #e6e1e5;
+      --m3-subtext: #938f99;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+    }
+
+    body, html {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: #090a0f;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      color: var(--m3-text);
+    }
+
+    #canvas-container {
+      width: 100%;
+      height: 100%;
+      position: absolute;
+      top: 0;
+      left: 0;
+      z-index: 1;
+    }
+
+    /* Single-Level Material Design 3 Floating HUD */
+    .m3-hud {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 10;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 18px;
+      background: var(--m3-surface);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid var(--m3-border);
+      border-radius: 999px;
+      box-shadow: 0 12px 36px rgba(0, 0, 0, 0.65);
+      max-width: 96vw;
+      overflow-x: auto;
+    }
+
+    .hud-divider {
+      width: 1px;
+      height: 28px;
+      background: var(--m3-border);
+      flex-shrink: 0;
+    }
+
+    /* Turn & Status Pill */
+    .status-pill {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 16px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.06);
+      font-weight: 600;
+      font-size: 0.88rem;
+      letter-spacing: 0.2px;
+      white-space: nowrap;
+    }
+
+    .turn-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: #f5f5f7;
+      box-shadow: 0 0 10px rgba(255, 255, 255, 0.8);
+      transition: all 0.3s ease;
+    }
+
+    .turn-dot.obsidian {
+      background: #1c1926;
+      border: 2px solid #a855f7;
+      box-shadow: 0 0 10px rgba(168, 85, 247, 0.8);
+    }
+
+    /* Camera & Mode Chips */
+    .chip-group {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .m3-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 14px;
+      border-radius: 999px;
+      border: 1px solid transparent;
+      background: rgba(255, 255, 255, 0.05);
+      color: var(--m3-text);
+      font-family: inherit;
+      font-size: 0.82rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s cubic-bezier(0.2, 0, 0, 1);
+      white-space: nowrap;
+    }
+
+    .m3-chip:hover {
+      background: rgba(255, 255, 255, 0.12);
+    }
+
+    .m3-chip.active {
+      background: var(--m3-primary);
+      color: var(--m3-on-primary);
+      font-weight: 600;
+    }
+
+    /* Captured Counters */
+    .capture-tray {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 0 8px;
+      font-size: 0.82rem;
+      color: var(--m3-subtext);
+      white-space: nowrap;
+    }
+
+    .capture-badge {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-weight: 600;
+      color: var(--m3-text);
+    }
+
+    /* FAB Reset Button */
+    .m3-fab {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      border: none;
+      background: rgba(248, 113, 113, 0.18);
+      color: var(--m3-crimson);
+      cursor: pointer;
+      transition: all 0.25s ease;
+      flex-shrink: 0;
+    }
+
+    .m3-fab:hover {
+      background: var(--m3-crimson);
+      color: #121212;
+      transform: rotate(-45deg);
+    }
+
+    .material-symbols-rounded {
+      font-size: 18px;
+    }
+
+    /* Subtle Top Ambient Banner */
+    .ambient-title {
+      position: fixed;
+      top: 20px;
+      left: 24px;
+      z-index: 10;
+      pointer-events: none;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .ambient-title h1 {
+      font-size: 1rem;
+      font-weight: 600;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      color: rgba(230, 225, 229, 0.85);
+    }
+
+    .ambient-title span {
+      font-size: 0.75rem;
+      color: var(--m3-subtext);
+    }
+  </style>
+</head>
+<body>
+
+  <div class="ambient-title">
+    <h1>Wizard's Chess</h1>
+    <span>Gothic Sanctum • Carrera Marble vs. Volcanic Obsidian</span>
+  </div>
+
+  <div id="canvas-container"></div>
+
+  <!-- Single-Level Navigation HUD (Material Design 3) -->
+  <nav class="m3-hud" aria-label="Game Controls">
+    <div class="status-pill">
+      <div id="turn-dot" class="turn-dot"></div>
+      <span id="status-text">Marble's Turn</span>
+    </div>
+
+    <div class="hud-divider"></div>
+
+    <div class="chip-group" role="group" aria-label="Camera Presets">
+      <button class="m3-chip active" data-cam="marble">
+        <span class="material-symbols-rounded">person</span> Marble POV
+      </button>
+      <button class="m3-chip" data-cam="obsidian">
+        <span class="material-symbols-rounded">visibility</span> Obsidian POV
+      </button>
+      <button class="m3-chip" data-cam="top">
+        <span class="material-symbols-rounded">grid_view</span> Top-Down
+      </button>
+      <button class="m3-chip" data-cam="cinematic">
+        <span class="material-symbols-rounded">movie</span> Sanctuary Orbit
+      </button>
+    </div>
+
+    <div class="hud-divider"></div>
+
+    <button id="mode-toggle" class="m3-chip active">
+      <span class="material-symbols-rounded">smart_toy</span> vs. AI
+    </button>
+
+    <div class="hud-divider"></div>
+
+    <div class="capture-tray" title="Shattered Pieces">
+      <div class="capture-badge">
+        <span>⚪ Shattered:</span>
+        <span id="shattered-w">0</span>
+      </div>
+      <div class="capture-badge">
+        <span>⚫ Shattered:</span>
+        <span id="shattered-b">0</span>
+      </div>
+    </div>
+
+    <button id="reset-btn" class="m3-fab" title="Reconstruct Board">
+      <span class="material-symbols-rounded">restart_alt</span>
+    </button>
+  </nav>
+
+  <script>
+    // ==========================================
+    // 1. SCENE, CAMERA & GOTHIC ATMOSPHERE SETUP
+    // ==========================================
+    const container = document.getElementById('canvas-container');
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x090a0f);
+    scene.fog = new THREE.FogExp2(0x090a0f, 0.022);
+
+    const camera = new THREE.PerspectiveCamera(42, window.innerWidth / window.innerHeight, 0.1, 150);
+    camera.position.set(0, 11, 13);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.15;
+    container.appendChild(renderer.domElement);
+
+    const controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.05;
+    controls.maxPolarAngle = Math.PI / 2 - 0.04;
+    controls.minDistance = 6;
+    controls.maxDistance = 32;
+    controls.target.set(0, 0, 0);
+
+    // Lighting: Warm Sanctuary Spot + Gothic Blue Rim + Point Accents
+    const ambientLight = new THREE.AmbientLight(0x282c3e, 1.3);
+    scene.add(ambientLight);
+
+    const mainSpot = new THREE.SpotLight(0xfff1d0, 3.2);
+    mainSpot.position.set(4, 22, 4);
+    mainSpot.angle = Math.PI / 4;
+    mainSpot.penumbra = 0.65;
+    mainSpot.castShadow = true;
+    mainSpot.shadow.mapSize.width = 2048;
+    mainSpot.shadow.mapSize.height = 2048;
+    mainSpot.shadow.bias = -0.0005;
+    scene.add(mainSpot);
+
+    const rimLight1 = new THREE.DirectionalLight(0x6366f1, 1.4);
+    rimLight1.position.set(-15, 10, -12);
+    scene.add(rimLight1);
+
+    const rimLight2 = new THREE.DirectionalLight(0xa855f7, 1.1);
+    rimLight2.position.set(15, 8, -10);
+    scene.add(rimLight2);
+
+    // ==========================================
+    // 2. PROCEDURAL MINIMALIST GOTHIC CATHEDRAL
+    // ==========================================
+    const cathedralGroup = new THREE.Group();
+    scene.add(cathedralGroup);
+
+    const slateMat = new THREE.MeshStandardMaterial({
+      color: 0x14161f,
+      roughness: 0.85,
+      metalness: 0.15
+    });
+
+    // Sanctuary Floor
+    const floorGeo = new THREE.PlaneGeometry(120, 120);
+    const floorMesh = new THREE.Mesh(floorGeo, slateMat);
+    floorMesh.rotation.x = -Math.PI / 2;
+    floorMesh.position.y = -1.2;
+    floorMesh.receiveShadow = true;
+    cathedralGroup.add(floorMesh);
+
+    // Gothic Ribbed Columns & Pointed Arches
+    const pillarPositions = [
+      [-14, -14], [14, -14], [-14, 0], [14, 0], [-14, 14], [14, 14],
+      [-7, -20], [7, -20], [-7, 20], [7, 20]
+    ];
+
+    const pillarGeo = new THREE.CylinderGeometry(0.85, 1.1, 28, 12);
+    pillarPositions.forEach(([px, pz]) => {
+      const pillar = new THREE.Mesh(pillarGeo, slateMat);
+      pillar.position.set(px, 12.8, pz);
+      pillar.castShadow = true;
+      pillar.receiveShadow = true;
+      cathedralGroup.add(pillar);
+
+      // Ribbed Vault Arch Ring
+      const archGeo = new THREE.TorusGeometry(14, 0.3, 8, 32, Math.PI);
+      const arch = new THREE.Mesh(archGeo, slateMat);
+      arch.position.set(0, 14, pz);
+      cathedralGroup.add(arch);
+    });
+
+    // Volumetric God-Ray Cones from Lancet Windows
+    const rayGeo = new THREE.ConeGeometry(4.5, 26, 24, 1, true);
+    const rayMat = new THREE.MeshBasicMaterial({
+      color: 0xffe4b5,
+      transparent: true,
+      opacity: 0.035,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending
+    });
+
+    [-8, 0, 8].forEach((zPos) => {
+      const ray = new THREE.Mesh(rayGeo, rayMat);
+      ray.position.set(-6, 11, zPos);
+      ray.rotation.z = -Math.PI / 7;
+      cathedralGroup.add(ray);
+    });
+
+    // ==========================================
+    // 3. CHESSBOARD & PBR MATERIALS
+    // ==========================================
+    const boardGroup = new THREE.Group();
+    scene.add(boardGroup);
+
+    // Pedestal
+    const pedestalGeo = new THREE.BoxGeometry(10.8, 1.0, 10.8);
+    const pedestalMat = new THREE.MeshStandardMaterial({ color: 0x181920, roughness: 0.4, metalness: 0.3 });
+    const pedestal = new THREE.Mesh(pedestalGeo, pedestalMat);
+    pedestal.position.y = -0.55;
+    pedestal.receiveShadow = true;
+    boardGroup.add(pedestal);
+
+    // Gold Inlay Frame
+    const goldMat = new THREE.MeshStandardMaterial({ color: 0xd4af37, roughness: 0.25, metalness: 0.85 });
+    const frameGeo = new THREE.BoxGeometry(9.8, 0.16, 9.8);
+    const frameMesh = new THREE.Mesh(frameGeo, goldMat);
+    frameMesh.position.y = -0.06;
+    boardGroup.add(frameMesh);
+
+    // Square Materials
+    const marbleSquareMat = new THREE.MeshPhysicalMaterial({
+      color: 0xf3f4f6,
+      roughness: 0.15,
+      metalness: 0.05,
+      clearcoat: 0.8,
+      clearcoatRoughness: 0.1
+    });
+
+    const obsidianSquareMat = new THREE.MeshPhysicalMaterial({
+      color: 0x11131a,
+      roughness: 0.08,
+      metalness: 0.25,
+      clearcoat: 1.0,
+      clearcoatRoughness: 0.05
+    });
+
+    // Piece Materials
+    const whitePieceMat = new THREE.MeshPhysicalMaterial({
+      color: 0xfafaf9,
+      roughness: 0.14,
+      metalness: 0.02,
+      clearcoat: 0.85,
+      reflectivity: 0.9
+    });
+
+    const blackPieceMat = new THREE.MeshPhysicalMaterial({
+      color: 0x0d0b14,
+      emissive: 0x120924,
+      emissiveIntensity: 0.35,
+      roughness: 0.05,
+      metalness: 0.3,
+      clearcoat: 1.0
+    });
+
+    const squareMeshes = {};
+    const highlightGroup = new THREE.Group();
+    scene.add(highlightGroup);
+
+    const files = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
+    const squareGeo = new THREE.BoxGeometry(1.14, 0.15, 1.14);
+
+    for (let r = 0; r < 8; r++) {
+      for (let c = 0; c < 8; c++) {
+        const isLight = (r + c) % 2 === 0;
+        const sqMesh = new THREE.Mesh(squareGeo, isLight ? marbleSquareMat : obsidianSquareMat);
+        const worldX = (c - 3.5) * 1.18;
+        const worldZ = (r - 3.5) * 1.18;
+        sqMesh.position.set(worldX, 0, worldZ);
+        sqMesh.receiveShadow = true;
+
+        const sqName = `${files[c]}${8 - r}`;
+        sqMesh.userData = { square: sqName };
+        boardGroup.add(sqMesh);
+        squareMeshes[sqName] = sqMesh;
+      }
+    }
+
+    // ==========================================
+    // 4. PROCEDURAL 3D PIECE SILHOUETTES
+    // ==========================================
+    function createPieceMesh(type, color) {
+      const group = new THREE.Group();
+      const mat = color === 'w' ? whitePieceMat : blackPieceMat;
+
+      // Shared Base Pedestal
+      const base = new THREE.Mesh(new THREE.CylinderGeometry(0.38, 0.44, 0.22, 24), mat);
+      base.position.y = 0.11;
+      base.castShadow = true;
+      base.receiveShadow = true;
+      group.add(base);
+
+      const goldRing = new THREE.Mesh(new THREE.TorusGeometry(0.39, 0.025, 8, 24), goldMat);
+      goldRing.rotation.x = Math.PI / 2;
+      goldRing.position.y = 0.22;
+      group.add(goldRing);
+
+      if (type === 'p') {
+        const body = new THREE.Mesh(new THREE.ConeGeometry(0.3, 0.75, 20), mat);
+        body.position.y = 0.55;
+        const head = new THREE.Mesh(new THREE.OctahedronGeometry(0.22, 1), mat);
+        head.position.y = 1.02;
+        body.castShadow = head.castShadow = true;
+        group.add(body, head);
+      } else if (type === 'r') {
+        const tower = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.34, 1.05, 8), mat);
+        tower.position.y = 0.72;
+        const crown = new THREE.Mesh(new THREE.BoxGeometry(0.58, 0.24, 0.58), mat);
+        crown.position.y = 1.3;
+        tower.castShadow = crown.castShadow = true;
+        group.add(tower, crown);
+      } else if (type === 'n') {
+        const body = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.34, 0.9, 16), mat);
+        body.position.y = 0.65;
+        const head = new THREE.Mesh(new THREE.ConeGeometry(0.28, 0.65, 4), mat);
+        head.position.set(0, 1.22, 0.08);
+        head.rotation.x = color === 'w' ? -Math.PI / 3 : Math.PI / 3;
+        body.castShadow = head.castShadow = true;
+        group.add(body, head);
+      } else if (type === 'b') {
+        const body = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.33, 1.15, 20), mat);
+        body.position.y = 0.78;
+        const mitre = new THREE.Mesh(new THREE.OctahedronGeometry(0.26, 0), mat);
+        mitre.scale.set(1, 1.45, 1);
+        mitre.position.y = 1.48;
+        body.castShadow = mitre.castShadow = true;
+        group.add(body, mitre);
+      } else if (type === 'q') {
+        const body = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.36, 1.35, 24), mat);
+        body.position.y = 0.88;
+        const tiara = new THREE.Mesh(new THREE.TorusGeometry(0.24, 0.04, 10, 24), goldMat);
+        tiara.rotation.x = Math.PI / 2;
+        tiara.position.y = 1.56;
+        const orb = new THREE.Mesh(new THREE.SphereGeometry(0.18, 16, 16), mat);
+        orb.position.y = 1.7;
+        body.castShadow = orb.castShadow = true;
+        group.add(body, tiara, orb);
+      } else if (type === 'k') {
+        const body = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.38, 1.5, 8), mat);
+        body.position.y = 0.95;
+        const crossV = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.38, 0.1), goldMat);
+        crossV.position.y = 1.88;
+        const crossH = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.1, 0.1), goldMat);
+        crossH.position.y = 1.92;
+        body.castShadow = true;
+        group.add(body, crossV, crossH);
+      }
+
+      return group;
+    }
+
+    // ==========================================
+    // 5. STATE MACHINE: IDLE, MOVE, ATTACK, SHATTER
+    // ==========================================
+    const chess = new Chess();
+    const pieceMap = {}; // square -> THREE.Group
+    const activeAnimations = [];
+    const shatterParticles = [];
+    let selectedSquare = null;
+    let validMovesForSelected = [];
+    let isAnimating = false;
+    let vsAI = true;
+    let cameraPreset = 'marble';
+    let shatteredCount = { w: 0, b: 0 };
+
+    function squareToWorld(sq) {
+      const target = squareMeshes[sq];
+      return new THREE.Vector3(target.position.x, 0.08, target.position.z);
+    }
+
+    function syncBoardFromFEN() {
+      // Clear current pieces
+      Object.values(pieceMap).forEach(mesh => scene.remove(mesh));
+      for (const k in pieceMap) delete pieceMap[k];
+
+      const board = chess.board();
+      for (let r = 0; r < 8; r++) {
+        for (let c = 0; c < 8; c++) {
+          const piece = board[r][c];
+          if (piece) {
+            const sq = `${files[c]}${8 - r}`;
+            const mesh = createPieceMesh(piece.type, piece.color);
+            const pos = squareToWorld(sq);
+            mesh.position.copy(pos);
+            mesh.userData = {
+              square: sq,
+              type: piece.type,
+              color: piece.color,
+              baseY: pos.y,
+              phase: Math.random() * Math.PI * 2
+            };
+            scene.add(mesh);
+            pieceMap[sq] = mesh;
+          }
+        }
+      }
+    }
+
+    // Spawn Voronoi-like 3D Shards on Capture
+    function triggerShatter(worldPos, color) {
+      const mat = color === 'w' ? whitePieceMat : blackPieceMat;
+      const shardGeo = new THREE.TetrahedronGeometry(0.18, 0);
+
+      for (let i = 0; i < 22; i++) {
+        const shard = new THREE.Mesh(shardGeo, mat);
+        shard.position.copy(worldPos).add(new THREE.Vector3(
+          (Math.random() - 0.5) * 0.4,
+          0.3 + Math.random() * 0.8,
+          (Math.random() - 0.5) * 0.4
+        ));
+        shard.scale.set(
+          0.6 + Math.random() * 0.9,
+          0.5 + Math.random() * 1.1,
+          0.6 + Math.random() * 0.9
+        );
+        shard.castShadow = true;
+        scene.add(shard);
+
+        shatterParticles.push({
+          mesh: shard,
+          vel: new THREE.Vector3(
+            (Math.random() - 0.5) * 5.2,
+            2.2 + Math.random() * 3.8,
+            (Math.random() - 0.5) * 5.2
+          ),
+          rotVel: new THREE.Vector3(
+            Math.random() * 8,
+            Math.random() * 8,
+            Math.random() * 8
+          ),
+          life: 2.4
+        });
+      }
+
+      shatteredCount[color]++;
+      document.getElementById('shattered-w').textContent = shatteredCount.w;
+      document.getElementById('shattered-b').textContent = shatteredCount.b;
+    }
+
+    function executeAnimatedMove(moveObj, onComplete) {
+      isAnimating = true;
+      clearHighlights();
+
+      const fromMesh = pieceMap[moveObj.from];
+      const targetMesh = pieceMap[moveObj.to]; // if standard capture
+      const startPos = fromMesh.position.clone();
+      const endPos = squareToWorld(moveObj.to);
+      const isCapture = Boolean(moveObj.captured);
+
+      let elapsed = 0;
+      const duration = isCapture ? 0.68 : 0.48;
+      let shatteredTriggered = false;
+
+      activeAnimations.push({
+        update: (dt) => {
+          elapsed += dt;
+          const t = Math.min(elapsed / duration, 1);
+          const ease = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+
+          // Parabolic Glide + Attack Wind-Up
+          fromMesh.position.lerpVectors(startPos, endPos, ease);
+          const arcHeight = isCapture ? 1.55 : 0.75;
+          fromMesh.position.y = startPos.y + Math.sin(t * Math.PI) * arcHeight;
+
+          if (isCapture) {
+            fromMesh.rotation.x = Math.sin(t * Math.PI * 2) * 0.35;
+          }
+
+          // Trigger shatter right before impact
+          if (isCapture && t >= 0.78 && !shatteredTriggered) {
+            shatteredTriggered = true;
+            if (targetMesh) {
+              triggerShatter(targetMesh.position, moveObj.color === 'w' ? 'b' : 'w');
+              scene.remove(targetMesh);
+            } else {
+              // En passant capture
+              triggerShatter(endPos, moveObj.color === 'w' ? 'b' : 'w');
+            }
+          }
+
+          if (t >= 1) {
+            fromMesh.rotation.set(0, 0, 0);
+            syncBoardFromFEN();
+            isAnimating = false;
+            updateHUDStatus();
+            if (onComplete) onComplete();
+            return true; // finished
+          }
+          return false;
+        }
+      });
+    }
+
+    // ==========================================
+    // 6. INTERACTION, HIGHLIGHTS & AI ENGINE
+    // ==========================================
+    const ringGeo = new THREE.RingGeometry(0.32, 0.44, 32);
+    const moveRingMat = new THREE.MeshBasicMaterial({ color: 0x4ade80, side: THREE.DoubleSide });
+    const attackRingMat = new THREE.MeshBasicMaterial({ color: 0xf87171, side: THREE.DoubleSide });
+    const selectRingMat = new THREE.MeshBasicMaterial({ color: 0xd0bcff, side: THREE.DoubleSide });
+
+    function clearHighlights() {
+      while (highlightGroup.children.length > 0) {
+        highlightGroup.remove(highlightGroup.children[0]);
+      }
+    }
+
+    function showHighlights(sq, moves) {
+      clearHighlights();
+      const originPos = squareToWorld(sq);
+      const selRing = new THREE.Mesh(ringGeo, selectRingMat);
+      selRing.rotation.x = -Math.PI / 2;
+      selRing.position.set(originPos.x, 0.09, originPos.z);
+      highlightGroup.add(selRing);
+
+      moves.forEach(m => {
+        const pos = squareToWorld(m.to);
+        const ring = new THREE.Mesh(ringGeo, m.captured ? attackRingMat : moveRingMat);
+        ring.rotation.x = -Math.PI / 2;
+        ring.position.set(pos.x, 0.09, pos.z);
+        highlightGroup.add(ring);
+      });
+    }
+
+    function evaluateBoard() {
+      const weights = { p: 10, n: 32, b: 33, r: 50, q: 90, k: 900 };
+      let score = 0;
+      const b = chess.board();
+      for (let r = 0; r < 8; r++) {
+        for (let c = 0; c < 8; c++) {
+          const p = b[r][c];
+          if (p) {
+            const val = weights[p.type] || 0;
+            score += p.color === 'b' ? val : -val;
+          }
+        }
+      }
+      return score;
+    }
+
+    function triggerAIMove() {
+      if (chess.game_over() || chess.turn() !== 'b') return;
+      setTimeout(() => {
+        const moves = chess.moves({ verbose: true });
+        if (moves.length === 0) return;
+
+        // 1-ply tactical heuristic + capture preference
+        let bestMove = moves[0];
+        let bestScore = -Infinity;
+
+        moves.forEach(m => {
+          chess.move(m);
+          let score = evaluateBoard() + (Math.random() * 4 - 2);
+          if (m.captured) score += 12;
+          chess.undo();
+          if (score > bestScore) {
+            bestScore = score;
+            bestMove = m;
+          }
+        });
+
+        const result = chess.move(bestMove);
+        executeAnimatedMove(result);
+      }, 420);
+    }
+
+    const raycaster = new THREE.Raycaster();
+    const pointer = new THREE.Vector2();
+
+    window.addEventListener('pointerdown', (e) => {
+      if (e.target.closest('.m3-hud') || isAnimating || chess.game_over()) return;
+      if (vsAI && chess.turn() === 'b') return;
+
+      pointer.x = (e.clientX / window.innerWidth) * 2 - 1;
+      pointer.y = -(e.clientY / window.innerHeight) * 2 + 1;
+      raycaster.setFromCamera(pointer, camera);
+
+      const sqList = Object.values(squareMeshes);
+      const pieceList = Object.values(pieceMap);
+      const hits = raycaster.intersectObjects([...sqList, ...pieceList], true);
+
+      if (hits.length === 0) {
+        selectedSquare = null;
+        clearHighlights();
+        return;
+      }
+
+      // Resolve clicked square
+      let hitObj = hits[0].object;
+      while (hitObj && !hitObj.userData.square && hitObj.parent) {
+        hitObj = hitObj.parent;
+      }
+      const clickedSq = hitObj ? hitObj.userData.square : null;
+      if (!clickedSq) return;
+
+      // Check if clicked square is a valid move destination
+      const chosenMove = validMovesForSelected.find(m => m.to === clickedSq);
+      if (selectedSquare && chosenMove) {
+        const moveResult = chess.move({
+          from: selectedSquare,
+          to: clickedSq,
+          promotion: 'q'
+        });
+        selectedSquare = null;
+        validMovesForSelected = [];
+
+        executeAnimatedMove(moveResult, () => {
+          if (vsAI && chess.turn() === 'b') {
+            triggerAIMove();
+          } else if (!vsAI) {
+            setCameraPreset(chess.turn() === 'w' ? 'marble' : 'obsidian');
+          }
+        });
+        return;
+      }
+
+      // Otherwise select own piece
+      const pieceOnSq = chess.get(clickedSq);
+      if (pieceOnSq && pieceOnSq.color === chess.turn()) {
+        selectedSquare = clickedSq;
+        validMovesForSelected = chess.moves({ square: clickedSq, verbose: true });
+        showHighlights(clickedSq, validMovesForSelected);
+      } else {
+        selectedSquare = null;
+        validMovesForSelected = [];
+        clearHighlights();
+      }
+    });
+
+    // ==========================================
+    // 7. M3 HUD & CAMERA PRESETS
+    // ==========================================
+    const camTargets = {
+      marble: new THREE.Vector3(0, 11, 13),
+      obsidian: new THREE.Vector3(0, 11, -13),
+      top: new THREE.Vector3(0, 18, 0.01),
+      cinematic: new THREE.Vector3(14, 9, 14)
+    };
+    let desiredCamPos = null;
+
+    function setCameraPreset(preset) {
+      cameraPreset = preset;
+      desiredCamPos = camTargets[preset].clone();
+      document.querySelectorAll('[data-cam]').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.cam === preset);
+      });
+    }
+
+    document.querySelectorAll('[data-cam]').forEach(btn => {
+      btn.addEventListener('click', () => setCameraPreset(btn.dataset.cam));
+    });
+
+    const modeBtn = document.getElementById('mode-toggle');
+    modeBtn.addEventListener('click', () => {
+      vsAI = !vsAI;
+      modeBtn.classList.toggle('active', vsAI);
+      modeBtn.innerHTML = vsAI
+        ? '<span class="material-symbols-rounded">smart_toy</span> vs. AI'
+        : '<span class="material-symbols-rounded">group</span> 2P Local';
+      if (vsAI && chess.turn() === 'b' && !chess.game_over()) {
+        triggerAIMove();
+      }
+    });
+
+    document.getElementById('reset-btn').addEventListener('click', () => {
+      chess.reset();
+      shatteredCount = { w: 0, b: 0 };
+      document.getElementById('shattered-w').textContent = '0';
+      document.getElementById('shattered-b').textContent = '0';
+      selectedSquare = null;
+      validMovesForSelected = [];
+      clearHighlights();
+      syncBoardFromFEN();
+      updateHUDStatus();
+      setCameraPreset('marble');
+    });
+
+    function updateHUDStatus() {
+      const dot = document.getElementById('turn-dot');
+      const text = document.getElementById('status-text');
+      const isWhite = chess.turn() === 'w';
+
+      dot.classList.toggle('obsidian', !isWhite);
+
+      if (chess.in_checkmate()) {
+        text.textContent = `Checkmate • ${isWhite ? 'Obsidian' : 'Marble'} Triumphs`;
+      } else if (chess.in_draw()) {
+        text.textContent = 'Sanctuary Stalemate • Draw';
+      } else {
+        const checkTag = chess.in_check() ? ' (CHECK!)' : '';
+        text.textContent = `${isWhite ? 'Marble' : 'Obsidian'}'s Turn${checkTag}`;
+      }
+    }
+
+    // ==========================================
+    // 8. RENDER LOOP & PHYSICS TICK
+    // ==========================================
+    const clock = new THREE.Clock();
+
+    function animate() {
+      requestAnimationFrame(animate);
+      const dt = Math.min(clock.getDelta(), 0.1);
+      const elapsed = clock.getElapsedTime();
+
+      // 1. Piece Idle State (Asynchronous Breathing & Royal Aura Sway)
+      if (!isAnimating) {
+        Object.values(pieceMap).forEach(mesh => {
+          const { baseY, phase, type } = mesh.userData;
+          const floatAmp = (type === 'k' || type === 'q') ? 0.06 : 0.025;
+          mesh.position.y = baseY + Math.sin(elapsed * 2.2 + phase) * floatAmp;
+          if (type === 'k' || type === 'q') {
+            mesh.rotation.y = Math.sin(elapsed * 0.8 + phase) * 0.12;
+          }
+        });
+      }
+
+      // 2. Active Move/Attack Animations
+      for (let i = activeAnimations.length - 1; i >= 0; i--) {
+        const done = activeAnimations[i].update(dt);
+        if (done) activeAnimations.splice(i, 1);
+      }
+
+      // 3. Shatter Shards Physics Simulation
+      for (let i = shatterParticles.length - 1; i >= 0; i--) {
+        const p = shatterParticles[i];
+        p.life -= dt;
+        if (p.life <= 0) {
+          scene.remove(p.mesh);
+          shatterParticles.splice(i, 1);
+          continue;
+        }
+        p.vel.y -= 9.8 * dt; // Gravity
+        p.mesh.position.addScaledVector(p.vel, dt);
+        p.mesh.rotation.x += p.rotVel.x * dt;
+        p.mesh.rotation.y += p.rotVel.y * dt;
+
+        // Board bounce
+        if (p.mesh.position.y < 0.12) {
+          p.mesh.position.y = 0.12;
+          p.vel.y *= -0.45;
+          p.vel.x *= 0.75;
+          p.vel.z *= 0.75;
+        }
+        p.mesh.scale.multiplyScalar(0.992);
+      }
+
+      // 4. Camera Preset Transitions
+      if (cameraPreset === 'cinematic') {
+        camera.position.x = Math.cos(elapsed * 0.18) * 16;
+        camera.position.z = Math.sin(elapsed * 0.18) * 16;
+        camera.position.y = 10 + Math.sin(elapsed * 0.35) * 2;
+      } else if (desiredCamPos) {
+        camera.position.lerp(desiredCamPos, 0.06);
+        if (camera.position.distanceTo(desiredCamPos) < 0.08) {
+          desiredCamPos = null;
+        }
+      }
+
+      controls.update();
+      renderer.render(scene, camera);
+    }
+
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    // Boot Game
+    syncBoardFromFEN();
+    updateHUDStatus();
+    animate();
+  </script>
+</body>
+</html>
